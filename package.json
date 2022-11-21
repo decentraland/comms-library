@@ -1,0 +1,60 @@
+{
+  "name": "my-app",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@dcl/catalyst-peer": "^1.0.14",
+    "@dcl/crypto": "^3.2.3",
+    "@dcl/ecs-math": "^1.0.3",
+    "@dcl/protocol": "^1.0.0-3514704273.commit-ceac819",
+    "@dcl/rpc": "^1.1.1",
+    "google-protobuf": "^3.20.1",
+    "livekit-client": "^1.5.0",
+    "mitt": "^3.0.0",
+    "react-redux": "^8.0.5",
+    "redux-saga": "^1.2.1",
+    "typesafe-actions": "^5.1.0"
+  },
+  "peerDependencies": {
+    "@dcl/crypto": "^3.2.3",
+    "@dcl/ecs-math": "^1.0.3",
+    "@dcl/rpc": "^1.1.1",
+    "@dcl/schemas": "^5.4.2",
+    "react-redux": "^8.0.5",
+    "redux-saga": "^1.2.1",
+    "typesafe-actions": "^5.1.0"
+  },
+  "devDependencies": {
+    "@jgoz/esbuild-plugin-typecheck": "^2.0.0",
+    "@types/react": "^18.0.25",
+    "@types/react-dom": "^18.0.9",
+    "@types/redux-logger": "^3.0.9",
+    "esbuild": "^0.15.15",
+    "mz-observable": "^1.0.1",
+    "npm-dts": "^1.3.12",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "redux-devtools-extension": "^2.13.9",
+    "redux-logger": "^3.0.6",
+    "typescript": "^4.9.3"
+  },
+  "scripts": {},
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
