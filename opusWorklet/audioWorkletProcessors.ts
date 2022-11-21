@@ -1,6 +1,6 @@
 import { RingBuffer } from './RingBuffer'
-import { OPUS_SAMPLES_PER_FRAME, VOICE_CHAT_SAMPLE_RATE } from './constants'
-import { InputWorkletRequestTopic, OutputWorkletRequestTopic } from './types'
+import { OPUS_SAMPLES_PER_FRAME, VOICE_CHAT_SAMPLE_RATE } from '../src/lib/voice/constants'
+import { InputWorkletRequestTopic, OutputWorkletRequestTopic } from '../src/lib/voice/types'
 
 export interface AudioWorkletProcessor {
   readonly port: MessagePort

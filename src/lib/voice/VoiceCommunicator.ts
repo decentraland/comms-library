@@ -1,12 +1,11 @@
 import { VoiceChatCodecWorkerMain, EncodeStream } from "./VoiceChatCodecWorkerMain"
 import { SortedLimitedQueue } from "./SortedLimitedQueue"
-import { VOICE_CHAT_SAMPLE_RATE, OPUS_FRAME_SIZE_MS } from "../../../opusWorklet/constants"
+import { VOICE_CHAT_SAMPLE_RATE, OPUS_FRAME_SIZE_MS } from "./constants"
 import { parse, write } from "sdp-transform"
-import { InputWorkletRequestTopic, OutputWorkletRequestTopic } from "../../../opusWorklet/types"
+import { InputWorkletRequestTopic, OutputWorkletRequestTopic } from "./types"
 import * as rfc4 from "@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen"
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const workletWorkerRaw = require("../../../opusWorklet/audioWorkletProcessors.txt")
+import workletWorkerRaw from './audioWorkletProcessors.json'
 const workletWorkerUrl = URL.createObjectURL(new Blob([workletWorkerRaw], { type: "application/javascript" }))
 
 export type StreamPlayingListener = (streamId: string, playing: boolean) => any

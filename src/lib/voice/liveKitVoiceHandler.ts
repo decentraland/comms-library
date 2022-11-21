@@ -318,7 +318,7 @@ export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandle
 
       for (const [_, participant] of room.participants) {
         const address = participant.identity
-        const peer = getPeer(address)
+        const peer = null as any // getPeer(address)
         const participantInfo = participantsInfo.get(address)
         if (participantInfo) {
           const spatialParams = peer?.position || position

@@ -1,7 +1,6 @@
-import { ResponseTopic, RequestTopic, VoiceChatWorkerRequest } from '../../../opusWorklet/types'
+import { ResponseTopic, RequestTopic, VoiceChatWorkerRequest } from './types'
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const audioWorkerRaw = require('../../../opusWorklet/worker.txt')
+import audioWorkerRaw from './worker.json'
 const audioWorkerUrl = URL.createObjectURL(new Blob([audioWorkerRaw], { type: 'application/javascript' }))
 
 type EncodeListener = (encoded: Uint8Array) => any

@@ -3,10 +3,6 @@ const { writeFileSync } = require("fs")
 const { resolve } = require("path")
 const { typecheckPlugin } = require("@jgoz/esbuild-plugin-typecheck")
 
-const { peerDependencies } = require("./package.json")
-const { mainModule } = require("process")
-const external = Object.keys(peerDependencies)
-
 const WATCH = !!process.env.WATCH
 const PRODUCTION = !!process.env.CI
 
@@ -29,37 +25,17 @@ async function buildWorker(entry, out) {
     outfile: out,
     treeShaking: true,
     plugins: [typecheckPlugin()],
-    define
+    write: false,
+    define,
   })
 
-  for (let warning of res.warnings) {
-    messages.push(warning)
+  for (let out of res.outputFiles) {
+    if (out.path.endsWith(".json")) {
+      writeFileSync(out.path, JSON.stringify(out.text))
+    } else {
+      writeFileSync(out.path, out.text)
+    }
   }
-
-  for (let error of res.errors) {
-    messages.push(error)
-    process.exitCode = 1
-  }
-}
-
-async function buildLib() {
-  console.log("> buildLib")
-  const res = await build({
-    entryPoints: ["index.ts"],
-    absWorkingDir: resolve("src/lib"),
-    bundle: true,
-    sourcemap: "both",
-    minify: PRODUCTION,
-    platform: "node",
-    write: true,
-    tsconfig: resolve("tsconfig.json"),
-    outfile: resolve("dist/lib.js"),
-    treeShaking: true,
-    external,
-    plugins: [typecheckPlugin()],
-    define
-  })
-
   for (let warning of res.warnings) {
     messages.push(warning)
   }
@@ -88,7 +64,7 @@ async function buildWebapp() {
       ".ts": "tsx",
     },
     plugins: [typecheckPlugin()],
-    define
+    define,
   }
 
   const res = await build(opt)
@@ -109,10 +85,9 @@ async function buildWebapp() {
 }
 
 async function main() {
-  await buildWorker("worker.ts", "worker.txt")
-  await buildWorker("audioWorkletProcessors.ts", "audioWorkletProcessors.txt")
+  await buildWorker("worker.ts", resolve("src/lib/voice/worker.json"))
+  await buildWorker("audioWorkletProcessors.ts", resolve("src/lib/voice/audioWorkletProcessors.json"))
 
-  await buildLib()
   await buildWebapp()
 
   if (messages.length) {
