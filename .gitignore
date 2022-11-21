@@ -26,3 +26,6 @@ opusWorklet/*.txt
 
 dist
 public/assets
+
+src/lib/voice/worker.json
+src/lib/voice/audioWorkletProcessors.json
