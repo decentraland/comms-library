@@ -1,18 +1,18 @@
 import mitt from "mitt"
 // eslint-ignore @typescript-eslint/no-unused-vars
 
-type BaseNode = {
+export type BaseNode = {
   cyId: number
   nodeName: string
 }
 
-type Graph = {
+export type Graph = {
   edges: Record<string, { from: BaseNode; to: BaseNode }>
   nodes: Record<string, BaseNode>
   nodeNum: number
 }
 
-const events = mitt<{
+export const audioGraphEvents = mitt<{
   addEdge: { from: BaseNode; to: BaseNode }
   addNode: { node: BaseNode }
   removeNode: { node: BaseNode }
@@ -21,7 +21,7 @@ const events = mitt<{
 
 // state and redux -------------------------------------------------------------
 
-let currentGraphState: Graph = { edges: {}, nodes: {}, nodeNum: 0 }
+export let currentGraphState: Graph = { edges: {}, nodes: {}, nodeNum: 0 }
 
 function addNodeToGraphReducer(graph: Graph, node: BaseNode): Graph {
   if (!node.cyId) {
@@ -41,7 +41,7 @@ function addNodeToGraphReducer(graph: Graph, node: BaseNode): Graph {
   }
 }
 
-events.on("addEdge", (evt) => {
+audioGraphEvents.on("addEdge", (evt) => {
   currentGraphState = addNodeToGraphReducer(addNodeToGraphReducer(currentGraphState, evt.to), evt.from)
 
   const edgeKey = evt.from.cyId + "_" + evt.to.cyId
@@ -54,10 +54,10 @@ events.on("addEdge", (evt) => {
     },
   }
 
-  events.emit("graphChanged", currentGraphState)
+  audioGraphEvents.emit("graphChanged", currentGraphState)
 })
 
-events.on("removeNode", (evt) => {
+audioGraphEvents.on("removeNode", (evt) => {
   const newEdges: Graph["edges"] = {}
 
   for (const i in currentGraphState.edges) {
@@ -74,16 +74,17 @@ events.on("removeNode", (evt) => {
 
   delete currentGraphState.nodes[evt.node.cyId]
 
-  events.emit("graphChanged", currentGraphState)
+  audioGraphEvents.emit("graphChanged", currentGraphState)
 })
 
-events.on("addNode", (evt) => {
+audioGraphEvents.on("addNode", (evt) => {
   currentGraphState = addNodeToGraphReducer(currentGraphState, evt.node)
-  events.emit("graphChanged", currentGraphState)
+  audioGraphEvents.emit("graphChanged", currentGraphState)
 })
 
 globalThis.getAudioGraph = getAudioGraph
 globalThis.getAudioGraphViz = getAudioGraphViz
+
 
 export function getAudioGraph() {
   return currentGraphState
@@ -185,7 +186,7 @@ function getConstructorName(obj: any) {
 AudioNode.prototype.connect = decoratePrototype(
   AudioNode.prototype.connect,
   function (this: AudioNode & BaseNode, result: any, args: any[]) {
-    events.emit("addEdge", {
+    audioGraphEvents.emit("addEdge", {
       from: this,
       to: args[0],
     })
@@ -195,7 +196,7 @@ AudioNode.prototype.connect = decoratePrototype(
 AudioNode.prototype.disconnect = decoratePrototype(
   AudioNode.prototype.disconnect,
   function (this: any, _result: any, _args: any[]) {
-    events.emit("removeNode", {
+    audioGraphEvents.emit("removeNode", {
       node: this,
     })
   }
@@ -213,7 +214,7 @@ function addNode(node: any) {
     addNode(node.destination)
     addNode(node.listener)
   }
-  events.emit("addNode", {
+  audioGraphEvents.emit("addNode", {
     node: node as any,
   })
 }
@@ -221,14 +222,14 @@ function addNode(node: any) {
 PannerNode.prototype.setPosition = decoratePrototype(
   PannerNode.prototype.setPosition,
   function (this: PannerNode, _result: any, _args: any[]) {
-    events.emit("graphChanged", { ...currentGraphState })
+    audioGraphEvents.emit("graphChanged", { ...currentGraphState })
   }
 )
 
 AudioListener.prototype.setPosition = decoratePrototype(
   AudioListener.prototype.setPosition,
   function (this: PannerNode, _result: any, _args: any[]) {
-    events.emit("graphChanged", { ...currentGraphState })
+    audioGraphEvents.emit("graphChanged", { ...currentGraphState })
   }
 )
 

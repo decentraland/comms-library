@@ -8,6 +8,7 @@
     "@dcl/ecs-math": "^1.0.3",
     "@dcl/protocol": "^1.0.0-3514704273.commit-ceac819",
     "@dcl/rpc": "^1.1.1",
+    "@hpcc-js/wasm": "^2.1.1",
     "google-protobuf": "^3.20.1",
     "livekit-client": "^1.5.0",
     "mitt": "^3.0.0",
@@ -25,8 +26,6 @@
     "typesafe-actions": "^5.1.0"
   },
   "devDependencies": {
-    "@types/d3": "^3.5.47",
-    "d3": "^3.5.17",
     "@jgoz/esbuild-plugin-typecheck": "^2.0.0",
     "@types/react": "^18.0.25",
     "@types/react-dom": "^18.0.9",

@@ -1,10 +1,13 @@
 import { Authenticator } from "@dcl/crypto"
 import { createUnsafeIdentity } from "@dcl/crypto/dist/crypto"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { connect, useDispatch, useSelector } from "react-redux"
+import { topologyEvents } from "../debug-helpers/p2p"
 import { commsConnectToAdapter, commsInitialized, getCommsIdentity, getCommsRoom } from "../lib"
 import { backupProfile } from "../lib/adapters/SimulatorAdapter"
+import { TopologyParams } from "../lib/interface"
 import "./App.css"
+import { Dot, PositionalCanvas } from "./Graph"
 import { createAuthIdentity } from "./identity"
 import { lastPosition } from "./kernel/globals"
 import { getAppError } from "./kernel/selectors"
@@ -88,6 +91,111 @@ function CommsSelector(props) {
   )
 }
 
+function nodeId(x: string) {
+  return JSON.stringify(x)
+}
+function addr(x: string) {
+  return JSON.stringify(x.substring(0, 8) + "..." + x.substr(-6))
+}
+
+function Topology() {
+  const [graph, setGraph] = useState(null)
+  const [dot, setDot] = useState("")
+
+  function listener(topology: Map<string, Map<string, TopologyParams>>) {
+    const nodes: string[] = []
+    const edges: string[] = []
+
+    const rings = new Map<string, Set<string>>()
+
+    const smallerHops = new Map<string, number>()
+
+    function setNodeWithHops(address: string, hops: number) {
+      if (!smallerHops.has(address)) {
+        smallerHops.set(address, hops)
+      } else {
+        if (smallerHops.get(address)! > hops) {
+          smallerHops.set(address, hops)
+        }
+      }
+    }
+
+    for (const [source, targets] of topology) {
+      for (const [target, params] of targets) {
+        setNodeWithHops(target, params.hops || 0)
+      }
+    }
+
+    function setInRing(ring: string, nodeId: string) {
+      if (!rings.has(ring)) {
+        rings.set(ring, new Set())
+      }
+      rings.get(ring)!.add(nodeId)
+    }
+
+    function ring(str: number | undefined) {
+      return "cluster_" + str
+    }
+
+    for (const [target, hops] of smallerHops) {
+      setInRing(ring(hops), nodeId(target))
+    }
+
+    for (const [ring, ids] of rings) {
+      nodes.push(`subgraph ${ring} {\n`)
+      nodes.push(`label = "${ring}";`)
+      nodes.push(
+        Array.from(ids)
+          .map(($) => $ + ";")
+          .join("\n")
+      )
+      nodes.push(`}\n`)
+    }
+
+    for (const [source, targets] of topology) {
+      nodes.push(`${nodeId(source)} [label=${addr(source)}];`)
+      for (const [target, params] of targets) {
+        nodes.push(`${nodeId(target)} [label=${addr(target)}];`)
+        edges.push(`${nodeId(source)}->${nodeId(target)};`)
+      }
+    }
+
+    //
+    // layout=sfdp;
+    setDot(`digraph G {
+      graph [ranksep=3, fontname = "arial", fontsize="10", color="grey", fontcolor="grey",rankdir=LR,concentrate=true, splines=ortho,overlap=prism];
+      node [fontname = "arial",fontsize="10", shape="box", style="rounded"];
+      edge [fontname = "arial",color="blue", fontcolor="blue",fontsize="10"];
+# nodes
+${nodes.join("\n")}
+# edges
+${edges.join("\n")}
+}`)
+  }
+
+  ;(globalThis as any).__DEBUG_DOT = dot
+
+  useEffect(() => {
+    topologyEvents.on("changed", listener)
+    return () => {
+      topologyEvents.off("changed", listener)
+    }
+  }, [])
+
+  return (
+    <>
+      <fieldset>
+        <legend>Topology</legend>
+        <Dot code={dot} />
+      </fieldset>
+      <fieldset>
+        <legend>Audio</legend>
+        <PositionalCanvas />
+      </fieldset>
+    </>
+  )
+}
+
 function App() {
   const err = useSelector(getAppError)
   return (
@@ -95,6 +203,7 @@ function App() {
       {err ? <pre style={{ color: "red", fontWeight: "bold" }}>{err.toString()}</pre> : <></>}
       <Identity />
       <CommsSelector />
+      <Topology />
     </div>
   )
 }
