@@ -1,15 +1,12 @@
 import * as rfc4 from "@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen"
 
-import "./audioDebugger"
+import "../../debug-helpers/audioDebugger"
 import withCache from "../withCache"
-import { createLogger } from "../logger"
 import { VoiceHandler } from "../types"
 import { VoiceCommunicator } from "./VoiceCommunicator"
-import { getSpatialParamsFor } from "./utils"
 
 const getVoiceCommunicator = withCache(() => {
   return new VoiceCommunicator({
-    initialListenerParams: undefined,
     panningModel: "HRTF",
   })
 })
@@ -43,7 +40,10 @@ export const createOpusVoiceHandler = (onDataFrame: (frame: rfc4.Voice) => void)
       })
     },
     reportPosition(position: rfc4.Position) {
-      voiceCommunicator.setListenerSpatialParams(getSpatialParamsFor(position))
+      voiceCommunicator.setListenerSpatialParams(position)
+    },
+    reportPeerPosition(address, position) {
+      voiceCommunicator.setVoiceRelativePosition(address, position)
     },
     setVolume: function (volume) {
       voiceCommunicator.setVolume(volume)
@@ -58,10 +58,11 @@ export const createOpusVoiceHandler = (onDataFrame: (frame: rfc4.Voice) => void)
       return voiceCommunicator.hasInput()
     },
     playEncodedAudio: (src, position, encoded) => {
-      return voiceCommunicator.playEncodedAudio(src, getSpatialParamsFor(position), encoded)
+      return voiceCommunicator.playEncodedAudio(src, position, encoded)
     },
     async destroy() {
       // noop
+      // TODO: cleanup all nodes in voiceCommunicator context
     },
   }
 }

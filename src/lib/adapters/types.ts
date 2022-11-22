@@ -35,6 +35,9 @@ export type CommsAdapterEvents = {
   DISCONNECTION: AdapterDisconnectedEvent
   PEER_DISCONNECTED: PeerDisconnectedEvent
   message: AdapterMessageEvent
+  PEER_CONNECTED: PeerConnectedEvent
+  PEER_LINKED: PeerLinkEvent
+  PEER_UNLINKED: PeerLinkEvent
   error: Error
 }
 
@@ -52,6 +55,18 @@ export type AdapterDisconnectedEvent = {
 // PEER_DISCONNECTED
 export type PeerDisconnectedEvent = {
   // The ethereum address of the disconnected peer
+  address: string
+}
+
+// PEER_LINKED PEER_UNLINKED
+export type PeerLinkEvent = {
+  peerA: string
+  peerB: string
+}
+
+// PEER_CONNECTED
+export type PeerConnectedEvent = {
+  // The ethereum address of the connected peer
   address: string
 }
 

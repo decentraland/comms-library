@@ -1,8 +1,9 @@
 import * as rfc4 from "@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen"
-import { CommsEvents, RoomConnection } from "../interface"
+import { CommsEvents, RoomConnection, TopologyParams } from "../interface"
 import mitt from "mitt"
 import { AdapterMessageEvent, MinimumCommunicationsAdapter } from "../adapters/types"
 import { VoiceHandler } from "../types"
+import { incrementCommsMessageReceivedByName } from "../performance"
 
 /**
  * This class implements Rfc4 on top of a ICommsTransport. The idea behind it is
@@ -18,6 +19,11 @@ export class Rfc4RoomConnection implements RoomConnection {
     this.transport.events.on("message", this.handleMessage.bind(this))
     this.transport.events.on("DISCONNECTION", (event) => this.events.emit("DISCONNECTION", event))
     this.transport.events.on("PEER_DISCONNECTED", (event) => this.events.emit("PEER_DISCONNECTED", event))
+    this.transport.events.on("PEER_CONNECTED", (event) => this.events.emit("PEER_CONNECTED", event))
+  }
+
+  getDebugTopology(): Map<string, Map<string, TopologyParams>> {
+    return new Map
   }
 
   async connect(): Promise<void> {
@@ -60,9 +66,13 @@ export class Rfc4RoomConnection implements RoomConnection {
 
   async disconnect() {
     await this.transport.disconnect()
+    this.events.all.clear()
   }
 
   private handleMessage({ data, address }: AdapterMessageEvent) {
+    incrementCommsMessageReceivedByName("bytesIn", data.length)
+    incrementCommsMessageReceivedByName("messagesIn", 1)
+
     const { message } = rfc4.Packet.decode(data)
 
     if (!message) {
@@ -116,6 +126,8 @@ export class Rfc4RoomConnection implements RoomConnection {
     }
     const bytes = rfc4.Packet.encode(topicMessage as any).finish()
     if (!this.transport) debugger
+    incrementCommsMessageReceivedByName("bytesOut", bytes.length)
+    incrementCommsMessageReceivedByName("messagesOut", 1)
     this.transport.send(bytes, { reliable })
   }
 }

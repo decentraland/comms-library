@@ -2,6 +2,7 @@ import { AuthIdentity } from "@dcl/crypto"
 import { Avatar } from "@dcl/schemas"
 import { RoomConnection } from "./interface"
 import * as rfc4 from "@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen"
+import { ILogger } from "@dcl/rpc"
 
 export type CommsIdentity = AuthIdentity & {
   hasConnectedWeb3: boolean
@@ -18,6 +19,16 @@ export type CommsState = {
   context: RoomConnection | undefined
   positionReader: PositionReader | undefined
 }
+
+export type TransportCreatorParameters = {
+  positionReader: PositionReader
+  identity: CommsIdentity
+  islandId: string
+  connectionString: string
+  logger: ILogger
+}
+
+export type TransportCreator = (params: TransportCreatorParameters) => Promise<RoomConnection>
 
 export type CommsConnectionState =
   | "initial"
@@ -61,7 +72,8 @@ export type VoiceHandler = {
   onRecording(cb: (recording: boolean) => void): void
 
   // Controls Methods
-  reportPosition(recording: rfc4.Position): void
+  reportPosition(position: rfc4.Position): void
+  reportPeerPosition(address: string, position: rfc4.Position): void
 
   setVolume(volume: number): void
 
@@ -72,7 +84,7 @@ export type VoiceHandler = {
   hasInput(): boolean
 
   // Play audio when we recive it from comms (only for opus)
-  playEncodedAudio?(src: string, relativePosition: rfc4.Position, encoded: rfc4.Voice): Promise<void>
+  playEncodedAudio?(address: string, relativePosition: rfc4.Position, encoded: rfc4.Voice): Promise<void>
 
   destroy(): Promise<void>
 }

@@ -8,14 +8,14 @@ import {
   Track,
   ParticipantEvent,
   RemoteAudioTrack,
-  LocalAudioTrack
-} from 'livekit-client'
-import { startLoopback } from './loopback'
+  LocalAudioTrack,
+} from "livekit-client"
+import { startLoopback } from "./loopback"
 
-import * as rfc4 from '@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen'
-import { VoiceHandler } from '../types'
-import { createLogger } from '../logger'
-import { getSpatialParamsFor, isChrome } from './utils'
+import * as rfc4 from "@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen"
+import { VoiceHandler } from "../types"
+import { createLogger } from "../logger"
+import { isChrome, setListenerParams, setPanNodeParams } from "./utils"
 
 type ParticipantInfo = {
   participant: RemoteParticipant
@@ -29,7 +29,7 @@ type ParticipantTrack = {
 }
 
 export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandler> => {
-  const logger = createLogger('🎙 LiveKitVoiceCommunicator: ')
+  const logger = createLogger("🎙 LiveKitVoiceCommunicator: ")
 
   let recordingListener: ((state: boolean) => void) | undefined
   let errorListener: ((message: string) => void) | undefined
@@ -57,20 +57,22 @@ export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandle
   }
 
   function getParticipantInfo(participant: RemoteParticipant): ParticipantInfo {
-    let $: ParticipantInfo | undefined = participantsInfo.get(participant.identity)
+    const addr = participant.identity.toLowerCase()
+
+    let $: ParticipantInfo | undefined = participantsInfo.get(addr)
 
     if (!$) {
       $ = {
         participant,
-        tracks: new Map()
+        tracks: new Map(),
       }
-      participantsInfo.set(participant.identity, $)
+      participantsInfo.set(addr, $)
 
       participant.on(ParticipantEvent.IsSpeakingChanged, (talking: boolean) => {
-        onUserTalkingCallback(participant.identity, talking)
+        onUserTalkingCallback(addr, talking)
       })
 
-      logger.info('Adding participant', participant.identity as any)
+      logger.info("Adding participant", addr as any)
     }
 
     return $
@@ -106,15 +108,15 @@ export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandle
   }
 
   function setupAudioTrackForRemoteTrack(track: RemoteAudioTrack): ParticipantTrack {
-    logger.info('Adding media track', track.sid as any)
+    logger.info("Adding media track", track.sid as any)
     const streamNode = audioContext.createMediaStreamSource(track.mediaStream!)
     const panNode = audioContext.createPanner()
 
     streamNode.connect(panNode)
     panNode.connect(gainNode)
 
-    panNode.panningModel = 'equalpower'
-    panNode.distanceModel = 'inverse'
+    panNode.panningModel = "equalpower"
+    panNode.distanceModel = "inverse"
     panNode.refDistance = 5
     panNode.maxDistance = 10000
     panNode.coneOuterAngle = 360
@@ -125,12 +127,12 @@ export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandle
     return {
       panNode,
       streamNode,
-      track
+      track,
     }
   }
 
   function disconnectParticipantTrack(participantTrack: ParticipantTrack) {
-    logger.info('Disconnecting media track', participantTrack.track.sid as any)
+    logger.info("Disconnecting media track", participantTrack.track.sid as any)
     participantTrack.panNode.disconnect()
     participantTrack.streamNode.disconnect()
     participantTrack.track.stop()
@@ -155,7 +157,7 @@ export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandle
   }
 
   async function handleDisconnect() {
-    logger.log('HANDLER DISCONNECTED')
+    logger.log("HANDLER DISCONNECTED")
 
     room
       .off(RoomEvent.Disconnected, handleDisconnect)
@@ -179,7 +181,7 @@ export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandle
   }
 
   function handleMediaDevicesError() {
-    if (errorListener) errorListener('Media Device Error')
+    if (errorListener) errorListener("Media Device Error")
   }
 
   function addParticipant(participant: RemoteParticipant) {
@@ -187,10 +189,11 @@ export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandle
   }
 
   function removeParticipantById(userId: string) {
+    const addr = userId.toLowerCase()
     // remove tracks from all attached elements
-    const participantInfo = participantsInfo.get(userId)
+    const participantInfo = participantsInfo.get(addr)
     if (participantInfo) {
-      logger.info('Removing participant', userId as any)
+      logger.info("Removing participant", addr as any)
       for (const [trackId, participantTrack] of participantInfo.tracks) {
         try {
           disconnectParticipantTrack(participantTrack)
@@ -199,7 +202,7 @@ export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandle
           logger.error(err)
         }
       }
-      participantsInfo.delete(userId)
+      participantsInfo.delete(addr)
     }
   }
 
@@ -241,21 +244,21 @@ export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandle
     .on(RoomEvent.ParticipantConnected, addParticipant)
     .on(RoomEvent.ParticipantDisconnected, removeParticipant)
     .on(RoomEvent.RoomMetadataChanged, function (...args) {
-      logger.log('RoomMetadataChanged', args as any)
+      logger.log("RoomMetadataChanged", args as any)
     })
     .on(RoomEvent.Reconnected, function (...args) {
       reconnectAllParticipants()
     })
     .on(RoomEvent.MediaDevicesChanged, function (...args) {
-      logger.log('MediaDevicesChanged', args as any)
+      logger.log("MediaDevicesChanged", args as any)
     })
     .on(RoomEvent.ParticipantMetadataChanged, function (...args) {
-      logger.log('ParticipantMetadataChanged', args as any)
+      logger.log("ParticipantMetadataChanged", args as any)
     })
 
-  if (audioContext.state !== 'running') await audioContext.resume()
+  if (audioContext.state !== "running") await audioContext.resume()
 
-  logger.log('initialized')
+  logger.log("initialized")
 
   reconnectAllParticipants()
 
@@ -266,7 +269,7 @@ export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandle
         .then(() => {
           if (recordingListener) recordingListener(recording)
         })
-        .catch((err) => logger.error('Error: ', err))
+        .catch((err) => logger.error("Error: ", err))
     },
     onUserTalking(cb) {
       onUserTalkingCallback = cb
@@ -286,61 +289,17 @@ export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandle
     onError(cb) {
       errorListener = cb
     },
-    reportPosition(position: rfc4.Position) {
-      const spatialParams = getSpatialParamsFor(position)
-      const listener = audioContext.listener
-
-      if (listener.positionX) {
-        listener.positionX.setValueAtTime(spatialParams.position[0], audioContext.currentTime)
-        listener.positionY.setValueAtTime(spatialParams.position[1], audioContext.currentTime)
-        listener.positionZ.setValueAtTime(spatialParams.position[2], audioContext.currentTime)
-      } else {
-        listener.setPosition(spatialParams.position[0], spatialParams.position[1], spatialParams.position[2])
-      }
-
-      if (listener.forwardX) {
-        listener.forwardX.setValueAtTime(spatialParams.orientation[0], audioContext.currentTime)
-        listener.forwardY.setValueAtTime(spatialParams.orientation[1], audioContext.currentTime)
-        listener.forwardZ.setValueAtTime(spatialParams.orientation[2], audioContext.currentTime)
-        listener.upX.setValueAtTime(0, audioContext.currentTime)
-        listener.upY.setValueAtTime(1, audioContext.currentTime)
-        listener.upZ.setValueAtTime(0, audioContext.currentTime)
-      } else {
-        listener.setOrientation(
-          spatialParams.orientation[0],
-          spatialParams.orientation[1],
-          spatialParams.orientation[2],
-          0,
-          1,
-          0
-        )
-      }
-
-      for (const [_, participant] of room.participants) {
-        const address = participant.identity
-        const peer = null as any // getPeer(address)
-        const participantInfo = participantsInfo.get(address)
-        if (participantInfo) {
-          const spatialParams = peer?.position || position
-          for (const [_, { panNode }] of participantInfo.tracks) {
-            if (panNode.positionX) {
-              panNode.positionX.setValueAtTime(spatialParams.positionX, audioContext.currentTime)
-              panNode.positionY.setValueAtTime(spatialParams.positionY, audioContext.currentTime)
-              panNode.positionZ.setValueAtTime(spatialParams.positionZ, audioContext.currentTime)
-            } else {
-              panNode.setPosition(spatialParams.positionX, spatialParams.positionY, spatialParams.positionZ)
-            }
-
-            if (panNode.orientationX) {
-              panNode.orientationX.setValueAtTime(0, audioContext.currentTime)
-              panNode.orientationY.setValueAtTime(0, audioContext.currentTime)
-              panNode.orientationZ.setValueAtTime(1, audioContext.currentTime)
-            } else {
-              panNode.setOrientation(0, 0, 1)
-            }
-          }
+    reportPeerPosition(address: string, position: rfc4.Position) {
+      const addr = address.toLowerCase()
+      const participant = participantsInfo.get(addr)
+      if (participant) {
+        for (const [, { panNode }] of participant.tracks) {
+          setPanNodeParams(audioContext, panNode, position)
         }
       }
+    },
+    reportPosition(position: rfc4.Position) {
+      setListenerParams(audioContext, audioContext.listener, position)
     },
     setVolume: function (volume) {
       globalVolume = volume
@@ -352,11 +311,11 @@ export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandle
     },
     setInputStream: async (localStream) => {
       try {
-        await room.switchActiveDevice('audioinput', localStream.id)
+        await room.switchActiveDevice("audioinput", localStream.id)
         validInput = true
       } catch (e) {
         validInput = false
-        if (errorListener) errorListener('setInputStream catch' + JSON.stringify(e))
+        if (errorListener) errorListener("setInputStream catch" + JSON.stringify(e))
       }
     },
     hasInput: () => {
@@ -369,6 +328,6 @@ export const createLiveKitVoiceHandler = async (room: Room): Promise<VoiceHandle
           .filter(Boolean)
       )
       await handleDisconnect()
-    }
+    },
   }
 }

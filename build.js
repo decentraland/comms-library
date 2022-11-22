@@ -59,6 +59,7 @@ async function buildWebapp() {
     outfile: "./public/assets/app.js",
     treeShaking: true,
     format: "esm",
+    inject: [resolve("src/inject.js")],
     loader: {
       ".js": "jsx",
       ".ts": "tsx",

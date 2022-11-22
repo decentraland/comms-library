@@ -1,4 +1,4 @@
-import { CommsEvents, RoomConnection } from "../interface/index"
+import { CommsEvents, RoomConnection, TopologyParams } from "../interface/index"
 import { Package } from "../interface/types"
 import { CommunicationArea, position2parcelRfc4, positionHashRfc4 } from "../interface/utils"
 import {
@@ -20,7 +20,7 @@ import {
   ProfileRequestData,
   ProfileResponseData,
 } from "./proto/comms_pb"
-import { CommsIdentity, CommsStatus } from "../types"
+import { CommsIdentity, CommsStatus, PositionReader } from "../types"
 
 import * as rfc4 from "@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen"
 import mitt from "mitt"
@@ -83,13 +83,13 @@ export class LighthouseWorldInstanceConnection implements RoomConnection {
 
   private rooms: string[] = []
   private disposed = false
-  private lastPosition: rfc4.Position | null = null
   private peerIdAdapter = peerIdHandler({ events: this.events })
   public onIslandChangedObservable = new Observable<{ island: string; peers: MinPeerData[] }>()
   currentIsland: string | undefined
   private chatMessageNumber = 0
 
   constructor(
+    private positionReader: PositionReader,
     private lighthouseUrl: string,
     private peerConfig: LighthouseConnectionConfig,
     private statusHandler: (status: CommsStatus) => void,
@@ -100,9 +100,46 @@ export class LighthouseWorldInstanceConnection implements RoomConnection {
     this.peer = this.initializePeer()
     previousLighthouseConnections.add(this)
   }
+  getDebugTopology(): Map<string, Map<string, TopologyParams>> {
+    const ret = new Map<string, Map<string, TopologyParams>>()
+
+    const directConnections = new Map<string, TopologyParams>()
+    for (const connection of this.peer.fullyConnectedPeerIds()) {
+      const peer = this.peerIdAdapter.getPeer(connection)
+      if (peer.address) {
+        directConnections.set(peer.address, {
+          hops: 0,
+        })
+      }
+    }
+
+    ret.set(this.identity.authChain[0].payload, directConnections)
+
+    function addConnection(source: string, target: string, params: TopologyParams) {
+      if (!ret.has(source)) {
+        ret.set(source, new Map())
+      }
+      ret.get(source)!.set(target, params)
+    }
+
+    for (const targetPeer of Object.values(this.peer.knownPeers)) {
+      for (const sourcePeer of Object.values(targetPeer.reachableThrough)) {
+        const source = this.peerIdAdapter.getPeer(sourcePeer.id)
+        const target = this.peerIdAdapter.getPeer(targetPeer.id)
+
+        if (source.address && target.address) {
+          addConnection(source.address, target.address, {
+            hops: sourcePeer.hops,
+          })
+        }
+      }
+    }
+
+    return ret
+  }
 
   async getVoiceHandler(): Promise<VoiceHandler> {
-    return createOpusVoiceHandler(frame => this.sendVoiceMessage(frame))
+    return createOpusVoiceHandler((frame) => this.sendVoiceMessage(frame))
   }
 
   async connect() {
@@ -137,43 +174,36 @@ export class LighthouseWorldInstanceConnection implements RoomConnection {
     previousLighthouseConnections.delete(this)
 
     this.events.emit("DISCONNECTION", data ?? { kicked: false })
+    this.events.all.clear()
   }
 
   async sendProfileMessage(profile: rfc4.AnnounceProfileVersion) {
-    if (this.lastPosition) {
-      const topic = positionHashRfc4(this.lastPosition)
+    const topic = positionHashRfc4(this.positionReader())
 
-      await this.sendProfileData(profile.profileVersion, topic, "profile")
-    }
+    await this.sendProfileData(profile.profileVersion, topic, "profile")
   }
 
   async sendProfileRequest(profileRequest: rfc4.ProfileRequest): Promise<void> {
-    if (this.lastPosition) {
-      const topic = positionHashRfc4(this.lastPosition)
+    const topic = positionHashRfc4(this.positionReader())
 
-      const profileRequestData = new ProfileRequestData()
-      profileRequestData.setUserId(profileRequest.address)
-      profileRequestData.setProfileVersion(profileRequest.profileVersion.toString() ?? "")
+    const profileRequestData = new ProfileRequestData()
+    profileRequestData.setUserId(profileRequest.address)
+    profileRequestData.setProfileVersion(profileRequest.profileVersion.toString() ?? "")
 
-      await this.sendData(topic, profileRequestData, ProfileRequestResponseType("request"))
-    }
+    await this.sendData(topic, profileRequestData, ProfileRequestResponseType("request"))
   }
 
   async sendProfileResponse(profileResponse: rfc4.ProfileResponse): Promise<void> {
-    if (this.lastPosition) {
-      const topic = positionHashRfc4(this.lastPosition)
+    const topic = positionHashRfc4(this.positionReader())
 
-      const profileResponseData = new ProfileResponseData()
-      profileResponseData.setSerializedProfile(profileResponse.serializedProfile)
+    const profileResponseData = new ProfileResponseData()
+    profileResponseData.setSerializedProfile(profileResponse.serializedProfile)
 
-      await this.sendData(topic, profileResponseData, ProfileRequestResponseType("response"))
-    }
+    await this.sendData(topic, profileResponseData, ProfileRequestResponseType("response"))
   }
 
   async sendPositionMessage(p: rfc4.Position) {
     const topic = positionHashRfc4(p)
-    this.lastPosition = p
-
     await this.sendPositionData(p, topic, "position")
   }
 
@@ -189,27 +219,23 @@ export class LighthouseWorldInstanceConnection implements RoomConnection {
   }
 
   async sendVoiceMessage(voice: rfc4.Voice): Promise<void> {
-    if (this.lastPosition) {
-      const topic = positionHashRfc4(this.lastPosition)
+    const topic = positionHashRfc4(this.positionReader())
 
-      const voiceData = new VoiceData()
-      voiceData.setEncodedSamples(voice.encodedSamples)
-      voiceData.setIndex(voice.index)
+    const voiceData = new VoiceData()
+    voiceData.setEncodedSamples(voice.encodedSamples)
+    voiceData.setIndex(voice.index)
 
-      await this.sendData(topic, voiceData, VoiceType)
-    }
+    await this.sendData(topic, voiceData, VoiceType)
   }
 
   async sendChatMessage(chat: rfc4.Chat) {
-    if (this.lastPosition) {
-      const topic = positionHashRfc4(this.lastPosition)
+    const topic = positionHashRfc4(this.positionReader())
 
-      const chatMessage = new ChatData()
-      chatMessage.setMessageId((this.chatMessageNumber++).toString())
-      chatMessage.setText(chat.message)
+    const chatMessage = new ChatData()
+    chatMessage.setMessageId((this.chatMessageNumber++).toString())
+    chatMessage.setText(chat.message)
 
-      await this.sendData(topic, chatMessage, PeerMessageTypes.reliable("chat"))
-    }
+    await this.sendData(topic, chatMessage, PeerMessageTypes.reliable("chat"))
   }
 
   private async syncRoomsWithPeer() {
@@ -264,22 +290,20 @@ export class LighthouseWorldInstanceConnection implements RoomConnection {
     this.rooms.length = 0
     if (this.currentIsland) this.rooms.push(this.currentIsland)
 
-    if (this.lastPosition) {
-      const newParcel = position2parcelRfc4(this.lastPosition)
-      // MIGRATE: commConfigurations.commRadius
-      const commArea = new CommunicationArea(newParcel, 5 /*commConfigurations.commRadius*/)
+    const newParcel = position2parcelRfc4(this.positionReader())
+    // MIGRATE: commConfigurations.commRadius
+    const commArea = new CommunicationArea(newParcel, 5 /*commConfigurations.commRadius*/)
 
-      const xMin = ((commArea.vMin.x + parcelLimits.maxParcelX) >> 2) << 2
-      const xMax = ((commArea.vMax.x + parcelLimits.maxParcelX) >> 2) << 2
-      const zMin = ((commArea.vMin.y + parcelLimits.maxParcelZ) >> 2) << 2
-      const zMax = ((commArea.vMax.y + parcelLimits.maxParcelZ) >> 2) << 2
+    const xMin = ((commArea.vMin.x + parcelLimits.maxParcelX) >> 2) << 2
+    const xMax = ((commArea.vMax.x + parcelLimits.maxParcelX) >> 2) << 2
+    const zMin = ((commArea.vMin.y + parcelLimits.maxParcelZ) >> 2) << 2
+    const zMax = ((commArea.vMax.y + parcelLimits.maxParcelZ) >> 2) << 2
 
-      for (let x = xMin; x <= xMax; x += 4) {
-        for (let z = zMin; z <= zMax; z += 4) {
-          const hash = `${x >> 2}:${z >> 2}`
-          if (!this.rooms.includes(hash)) {
-            this.rooms.push(hash)
-          }
+    for (let x = xMin; x <= xMax; x += 4) {
+      for (let z = zMin; z <= zMax; z += 4) {
+        const hash = `${x >> 2}:${z >> 2}`
+        if (!this.rooms.includes(hash)) {
+          this.rooms.push(hash)
         }
       }
     }
@@ -295,6 +319,7 @@ export class LighthouseWorldInstanceConnection implements RoomConnection {
   private initializePeer() {
     this.statusHandler({ status: "connecting", connectedPeers: this.connectedPeersCount() })
     this.peer = this.createPeer()
+
     globalThis.__DEBUG_PEER = this.peer
 
     if (this.peerConfig.preferedIslandId) {

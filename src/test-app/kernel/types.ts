@@ -1,4 +1,4 @@
 export type AppState = {
-  position: any
+  error: Error | null
 }
 export type RootAppState = { app: AppState }

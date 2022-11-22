@@ -1,8 +1,8 @@
-import { Package } from './types'
-import * as proto from '@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen'
-import { Emitter } from 'mitt'
-import { CommsAdapterEvents } from '../adapters/types'
-import { VoiceHandler } from '../types'
+import { Package } from "./types"
+import * as proto from "@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen"
+import { Emitter } from "mitt"
+import { CommsAdapterEvents } from "../adapters/types"
+import { VoiceHandler } from "../types"
 
 export type CommsEvents = CommsAdapterEvents & {
   // RFC4 messages
@@ -26,10 +26,17 @@ export interface RoomConnection {
   sendProfileMessage(profile: proto.AnnounceProfileVersion): Promise<void>
   sendProfileRequest(request: proto.ProfileRequest): Promise<void>
   sendProfileResponse(response: proto.ProfileResponse): Promise<void>
-  sendPositionMessage(position: Omit<proto.Position, 'index'>): Promise<void>
+  sendPositionMessage(position: Omit<proto.Position, "index">): Promise<void>
   sendParcelSceneMessage(message: proto.Scene): Promise<void>
   sendChatMessage(message: proto.Chat): Promise<void>
   sendVoiceMessage(message: proto.Voice): Promise<void>
 
   getVoiceHandler(): Promise<VoiceHandler>
+
+  // @internal
+  getDebugTopology(): Map<string, Map<string, TopologyParams>>
+}
+
+export type TopologyParams = {
+  hops?: number
 }

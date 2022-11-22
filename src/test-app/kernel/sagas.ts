@@ -1,16 +1,25 @@
 import { Position } from "@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen"
-import { delay, race, select, take } from "redux-saga/effects"
-import { SET_ROOM_CONNECTION } from "../../lib/actions"
-import { commsLogger } from "../../lib/context"
+import { put, take, takeEvery } from "redux-saga/effects"
+import { ErrorConnectingCommsAdapterAction, ERROR_CONNECTING_COMMS_ADAPTER, setRoomConnection } from "../../lib/actions"
 import { RoomConnection } from "../../lib/interface"
-import { getCommsRoom, getCurrentPositionReader } from "../../lib/selectors"
-import { PositionReader } from "../../lib/types"
-import { BEFORE_UNLOAD } from "./actions"
+import { BEFORE_UNLOAD, FATAL_ERROR } from "./actions"
 import { positionObservable } from "./globals"
 import { deepEqual } from "./helpers"
 
 // the functions in this file should be implemented by kernel
-export function* kernelSagas() {}
+export function* kernelSagas() {
+  // MIGRATE:
+  yield takeEvery(ERROR_CONNECTING_COMMS_ADAPTER, (errAction: ErrorConnectingCommsAdapterAction) => {
+    // notifyStatusThroughChat('Error connecting to comms. Will try another realm')
+    console.error("ERROR CONNECTING COMMS", errAction.payload.error)
+  })
+
+  // MIGRATE:
+  yield takeEvery([BEFORE_UNLOAD, FATAL_ERROR], function* () {
+    // this would disconnect the comms context
+    yield put(setRoomConnection(undefined))
+  })
+}
 
 /**
  * This saga reports the position of our player:

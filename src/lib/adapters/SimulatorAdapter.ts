@@ -12,7 +12,7 @@ import {
   Scene,
   Voice,
 } from "@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen"
-import { CommsEvents, RoomConnection } from "../interface"
+import { CommsEvents, RoomConnection, TopologyParams } from "../interface"
 import { Rfc4RoomConnection } from "../logic/rfc-4-room-connection"
 import { CommsAdapterEvents, SendHints } from "./types"
 import { PositionReader, VoiceHandler } from "../types"
@@ -50,6 +50,9 @@ export class SimulationRoom implements RoomConnection {
         return null as any
       },
     })
+  }
+  getDebugTopology(): Map<string, Map<string, TopologyParams>> {
+    return new Map
   }
 
   async getVoiceHandler(): Promise<VoiceHandler> {

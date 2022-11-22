@@ -189,6 +189,7 @@ export class WebSocketAdapter implements MinimumCommunicationsAdapter {
       case 'peerJoinMessage': {
         const { peerJoinMessage } = message
         this.peersToAddress.set(peerJoinMessage.alias, peerJoinMessage.address)
+        this.events.emit("PEER_CONNECTED", { address: peerJoinMessage.address })
         break
       }
       case 'peerKicked': {

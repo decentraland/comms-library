@@ -5,7 +5,8 @@ import { parse, write } from "sdp-transform"
 import { InputWorkletRequestTopic, OutputWorkletRequestTopic } from "./types"
 import * as rfc4 from "@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen"
 
-import workletWorkerRaw from './audioWorkletProcessors.json'
+import workletWorkerRaw from "./audioWorkletProcessors.json"
+import { setListenerParams, setPanNodeParams } from "./utils"
 const workletWorkerUrl = URL.createObjectURL(new Blob([workletWorkerRaw], { type: "application/javascript" }))
 
 export type StreamPlayingListener = (streamId: string, playing: boolean) => any
@@ -16,7 +17,7 @@ type VoiceOutput = {
   encodedFramesQueue: SortedLimitedQueue<rfc4.Voice>
   workletNode?: AudioWorkletNode
   panNode?: PannerNode
-  spatialParams: VoiceSpatialParams
+  position: rfc4.Position
   lastUpdateTime: number
   playing: boolean
   lastDecodedFrameOrder?: number
@@ -40,7 +41,6 @@ export type VoiceCommunicatorOptions = {
   outputBufferLength?: number
   maxDistance?: number
   refDistance?: number
-  initialListenerParams?: VoiceSpatialParams
   panningModel?: PanningModelType
   distanceModel?: DistanceModelType
   volume?: number
@@ -107,10 +107,6 @@ export class VoiceCommunicator {
       this.outputGainNode.connect(this.context.destination)
     }
 
-    if (this.options.initialListenerParams) {
-      this.setListenerSpatialParams(this.options.initialListenerParams)
-    }
-
     this.voiceChatWorkerMain = new VoiceChatCodecWorkerMain()
 
     this.startOutputsExpiration()
@@ -144,12 +140,12 @@ export class VoiceCommunicator {
     return this.outputStats[outputId]
   }
 
-  async playEncodedAudio(src: string, relativePosition: VoiceSpatialParams, encoded: rfc4.Voice) {
+  async playEncodedAudio(src: string, position: rfc4.Position, encoded: rfc4.Voice) {
     if (!this.outputs[src]) {
-      await this.createOutput(src, relativePosition)
+      await this.createOutput(src, position)
     } else {
       this.outputs[src].lastUpdateTime = Date.now()
-      this.setVoiceRelativePosition(src, relativePosition)
+      this.setVoiceRelativePosition(src, position)
     }
 
     const output = this.outputs[src]
@@ -165,32 +161,10 @@ export class VoiceCommunicator {
     }
   }
 
-  setListenerSpatialParams(spatialParams: VoiceSpatialParams) {
-    const listener = this.context.listener
-    listener.setPosition(spatialParams.position[0], spatialParams.position[1], spatialParams.position[2])
-    listener.setOrientation(
-      spatialParams.orientation[0],
-      spatialParams.orientation[1],
-      spatialParams.orientation[2],
-      0,
-      1,
-      0
-    )
+  setListenerSpatialParams(position: rfc4.Position) {
+    setListenerParams(this.context, this.context.listener, position)
   }
 
-  updatePannerNodeParameters(src: string) {
-    const panNode = this.outputs[src].panNode
-    const spatialParams = this.outputs[src].spatialParams
-
-    if (panNode) {
-      panNode.positionX.value = spatialParams.position[0]
-      panNode.positionY.value = spatialParams.position[1]
-      panNode.positionZ.value = spatialParams.position[2]
-      panNode.orientationX.value = spatialParams.orientation[0]
-      panNode.orientationY.value = spatialParams.orientation[1]
-      panNode.orientationZ.value = spatialParams.orientation[2]
-    }
-  }
 
   setVolume(value: number) {
     this.options.volume = value
@@ -362,13 +336,13 @@ export class VoiceCommunicator {
     }
   }
 
-  private async createOutput(src: string, relativePosition: VoiceSpatialParams) {
+  private async createOutput(src: string, position: rfc4.Position) {
     this.outputs[src] = {
       encodedFramesQueue: new SortedLimitedQueue(
         Math.ceil((this.outputBufferLength * 1000) / OPUS_FRAME_SIZE_MS),
         (frameA, frameB) => frameA.index - frameB.index
       ),
-      spatialParams: relativePosition,
+      position,
       lastUpdateTime: Date.now(),
       playing: false,
     }
@@ -487,9 +461,12 @@ export class VoiceCommunicator {
     return encodeStream
   }
 
-  private setVoiceRelativePosition(src: string, spatialParams: VoiceSpatialParams) {
-    this.outputs[src].spatialParams = spatialParams
-    this.updatePannerNodeParameters(src)
+  setVoiceRelativePosition(src: string, position: rfc4.Position) {
+    this.outputs[src].position = position
+    const panNode = this.outputs[src].panNode
+    if (panNode) {
+      setPanNodeParams(this.context, panNode, position)
+    }
   }
 
   private notifyRecording(recording: boolean) {

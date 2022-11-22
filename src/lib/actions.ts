@@ -18,6 +18,10 @@ export const CONNECT_TO_COMMS = "[COMMS] commsConnectToAdapter"
 export const commsConnectToAdapter = (event: IslandChangedMessage) => action(CONNECT_TO_COMMS, { event })
 export type ConnectToCommsAction = ReturnType<typeof commsConnectToAdapter>
 
+export const ERROR_CONNECTING_COMMS_ADAPTER = "[COMMS] errorConnectingCommsAdapter"
+export const errorConnectingCommsAdapter = (error: Error) => action(ERROR_CONNECTING_COMMS_ADAPTER, { error })
+export type ErrorConnectingCommsAdapterAction = ReturnType<typeof errorConnectingCommsAdapter>
+
 // this action is triggered to broadcast a new comms profile
 export const SET_COMMS_PROFILE = "[COMMS] setCommsProfile"
 export const setCommsProfile = (avatar: Avatar, avatarBaseUrl: string) =>

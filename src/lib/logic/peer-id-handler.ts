@@ -1,7 +1,7 @@
-import { Emitter } from 'mitt'
-import * as rfc4 from '@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen'
-import { PeerDisconnectedEvent } from '../adapters/types'
-import { CommsEvents } from '../interface'
+import { Emitter } from "mitt"
+import * as rfc4 from "@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen"
+import { PeerDisconnectedEvent } from "../adapters/types"
+import { CommsEvents } from "../interface"
 
 export type CachedPeer = {
   address?: string
@@ -27,7 +27,7 @@ export function peerIdHandler(options: { events: Emitter<CommsEvents> }) {
   function disconnectPeer(id: string) {
     const peer = getPeer(id)
     if (peer.address) {
-      options.events.emit('PEER_DISCONNECTED', { address: peer.address })
+      options.events.emit("PEER_DISCONNECTED", { address: peer.address })
     }
   }
 
@@ -51,47 +51,51 @@ export function peerIdHandler(options: { events: Emitter<CommsEvents> }) {
         peer.address = undefined
       }
 
-      if (!peer.address) {
+      if (peer.address !== address) {
+        options.events.emit("PEER_CONNECTED", { address: address })
         peer.address = address
-        if (peer.position) {
-          options.events.emit('position', { address, data: peer.position })
-        }
-        if (peer.profileResponse) {
-          options.events.emit('profileResponse', { address, data: peer.profileResponse })
-        }
-        if (peer.profileAnnounce) {
-          options.events.emit('profileMessage', { address, data: peer.profileAnnounce })
-        }
+      }
+      if (peer.position) {
+        options.events.emit("position", { address, data: peer.position })
+      }
+      if (peer.profileResponse) {
+        options.events.emit("profileResponse", { address, data: peer.profileResponse })
+      }
+      if (peer.profileAnnounce) {
+        options.events.emit("profileMessage", { address, data: peer.profileAnnounce })
       }
     },
+    getPeer(opaqueIdentifier: string) {
+      return getPeer(opaqueIdentifier)
+    },
     handleMessage<T extends keyof CommsEvents, X extends CommsEvents[T]>(message: T, packet: X) {
-      if (message === 'PEER_DISCONNECTED') {
+      if (message === "PEER_DISCONNECTED") {
         const p = packet as PeerDisconnectedEvent
         disconnectPeer(p.address)
         return
       }
 
-      if ('address' in packet) {
+      if ("address" in packet) {
         const peer = getPeer(packet.address)
 
         if (peer.address) {
           options.events.emit(message, { ...packet, address: peer.address })
         }
 
-        if ('data' in packet) {
-          if (message === 'position') {
+        if ("data" in packet) {
+          if (message === "position") {
             const p = packet.data as rfc4.Position
             if (!peer.position || p.index >= peer.position.index) peer.position = p
-          } else if (message === 'profileResponse') {
+          } else if (message === "profileResponse") {
             const p = packet.data as rfc4.ProfileResponse
             if (!peer.profileResponse) peer.profileResponse = p
-          } else if (message === 'profileMessage') {
+          } else if (message === "profileMessage") {
             const p = packet.data as rfc4.AnnounceProfileVersion
             if (!peer.profileAnnounce || peer.profileAnnounce.profileVersion < p.profileVersion)
               peer.profileAnnounce = p
           }
         }
       }
-    }
+    },
   }
 }

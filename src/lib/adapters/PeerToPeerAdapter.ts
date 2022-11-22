@@ -191,6 +191,8 @@ export class PeerToPeerAdapter implements MinimumCommunicationsAdapter {
       return
     }
 
+    this.events.emit("PEER_CONNECTED", { address: peerId })
+
     if (peerJoinMessage.islandId === this.config.islandId) {
       this.config.logger.log(`${peerId} joined ${this.config.islandId}`)
 

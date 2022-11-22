@@ -32,6 +32,12 @@ export class LivekitAdapter implements MinimumCommunicationsAdapter {
         })
         this.config.logger.log('remote participant left')
       })
+      .on(RoomEvent.ParticipantConnected, (_: RemoteParticipant) => {
+        this.events.emit('PEER_CONNECTED', {
+          address: _.identity
+        })
+        this.config.logger.log('remote participant joined')
+      })
       .on(RoomEvent.Disconnected, (_reason: DisconnectReason | undefined) => {
         this.config.logger.log('disconnected from room')
         this.disconnect().catch((err) => {

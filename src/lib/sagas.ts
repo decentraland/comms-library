@@ -11,6 +11,7 @@ import {
   commsEstablished,
   ConnectToCommsAction,
   CONNECT_TO_COMMS,
+  errorConnectingCommsAdapter,
   establishingComms,
   HandleRoomDisconnectionAction,
   HANDLE_ROOM_DISCONNECTION,
@@ -21,19 +22,13 @@ import {
   SET_COMMS_PROFILE,
   SET_ROOM_CONNECTION,
 } from "./actions"
-import { Rfc4RoomConnection } from "./logic/rfc-4-room-connection"
 import { Avatar, IPFSv2, Snapshots } from "@dcl/schemas"
 import * as rfc4 from "@dcl/protocol/out-ts/decentraland/kernel/comms/rfc4/comms.gen"
-import { OfflineAdapter } from "./adapters/OfflineAdapter"
-import { WebSocketAdapter } from "./adapters/WebSocketAdapter"
-import { LivekitAdapter } from "./adapters/LivekitAdapter"
-import { PeerToPeerAdapter } from "./adapters/PeerToPeerAdapter"
-import { SimulationRoom } from "./adapters/SimulatorAdapter"
-import { Authenticator } from "@dcl/crypto"
-import { LighthouseConnectionConfig, LighthouseWorldInstanceConnection } from "./v2/LighthouseWorldInstanceConnection"
-import { RoomConnection } from "./interface"
+import { CommsEvents, RoomConnection } from "./interface"
 import { CommsIdentity, PositionReader } from "./types"
-import { Position3D } from "@dcl/catalyst-peer"
+import { splitConnectionString, transportCrators } from "./adapters"
+import { createLogger } from "./logger"
+import { incrementCommsMessageReceivedByName } from "./performance"
 
 const TIME_BETWEEN_PROFILE_RESPONSES = 1000
 const INTERVAL_ANNOUNCE_PROFILE = 1000
@@ -45,16 +40,6 @@ export const genericAvatarSnapshots = {
 
 export function* commsSaga() {
   yield takeLatest(HANDLE_ROOM_DISCONNECTION, handleRoomDisconnectionSaga)
-
-  // MIGRATE: yield takeEvery(FATAL_ERROR, function* () {
-  // MIGRATE:   // set null context on fatal error. this will bring down comms.
-  // MIGRATE:   yield put(setRoomConnection(undefined))
-  // MIGRATE: })
-
-  // MIGRATE: yield takeEvery(BEFORE_UNLOAD, function* () {
-  // MIGRATE:   // this would disconnect the comms context
-  // MIGRATE:   yield put(setRoomConnection(undefined))
-  // MIGRATE: })
 
   yield takeEvery(CONNECT_TO_COMMS, handleConnectToComms)
 
@@ -149,192 +134,40 @@ function* handleConnectToComms(action: ConnectToCommsAction) {
     const positionReader: PositionReader | undefined = yield select(getCurrentPositionReader)
     if (!positionReader) throw new Error("Missing positionReader")
 
-    const ix = action.payload.event.connStr.indexOf(":")
-    const protocol = action.payload.event.connStr.substring(0, ix)
-    const url = action.payload.event.connStr.substring(ix + 1)
+    const [protocol] = splitConnectionString(action.payload.event.connStr)
 
-    yield put(setCommsIsland(action.payload.event.islandId))
+    const creator = transportCrators[protocol]
 
-    let adapter: RoomConnection | undefined = undefined
+    if (!creator) throw new Error("Unknown comms protocol: " + protocol)
 
-    switch (protocol) {
-      case "offline": {
-        adapter = new Rfc4RoomConnection(new OfflineAdapter())
-        break
-      }
-      case "ws-room": {
-        const finalUrl = !url.startsWith("ws:") && !url.startsWith("wss:") ? "wss://" + url : url
+    const adapter: RoomConnection = yield call(creator, {
+      connectionString: action.payload.event.connStr,
+      identity,
+      positionReader,
+      islandId: action.payload.event.islandId,
+      // MIGRATE: deactivate logger
+      logger: createLogger("comms-adapter"),
+    })
 
-        // TODO console
-        adapter = new Rfc4RoomConnection(new WebSocketAdapter(finalUrl, identity, console))
-        break
-      }
-      case "simulator": {
-        adapter = new SimulationRoom(url, positionReader)
-        break
-      }
-      case "livekit": {
-        const theUrl = new URL(url)
-        const token = theUrl.searchParams.get("access_token")
-        if (!token) {
-          throw new Error("No access token")
-        }
-        adapter = new Rfc4RoomConnection(
-          new LivekitAdapter({
-            logger: commsLogger,
-            url: theUrl.origin + theUrl.pathname,
-            token,
-          })
-        )
-        break
-      }
-      case "p2p": {
-        adapter = new Rfc4RoomConnection(yield call(createP2PAdapter, action.payload.event.islandId))
-        break
-      }
-      case "lighthouse": {
-        adapter = yield call(createLighthouseConnection, url)
-        break
-      }
-    }
-
-    if (!adapter) throw new Error(`A communications adapter could not be created for protocol=${protocol}`)
     ;(globalThis as any).__DEBUG_ADAPTER = adapter
 
     yield put(establishingComms())
     yield apply(adapter, adapter.connect, [])
+
+    adapter.events.on("*", handleCommsMetrics)
+
+    yield put(setCommsIsland(action.payload.event.islandId))
     yield put(setRoomConnection(adapter))
   } catch (error: any) {
-    // MIGRATE: notifyStatusThroughChat('Error connecting to comms. Will try another realm')
+    yield put(errorConnectingCommsAdapter(error))
+    yield put(setCommsIsland(undefined))
     // MIGRATE: yield put(setRealmAdapter(undefined))
     yield put(setRoomConnection(undefined))
   }
 }
 
-function* createP2PAdapter(islandId: string) {
-  const identity: CommsIdentity = yield select(getCommsIdentity)
-  const positionReader: PositionReader | undefined = yield select(getCurrentPositionReader)
-  if (!positionReader) throw new Error("Missing positionReader")
-  const peers = new Map<string, Position3D>()
-  // for (const [id, p] of Object.entries(islandChangedMessage.peers)) {
-  //   if (peerId !== id) {
-  //     peers.set(id, [p.x, p.y, p.z])
-  //   }
-  // }
-  return new PeerToPeerAdapter(
-    {
-      logger: commsLogger,
-      positionReader,
-      topicsService: null as any,
-      logConfig: {
-        debugWebRtcEnabled: true,
-        debugUpdateNetwork: true,
-        debugIceCandidates: true,
-        debugMesh: true,
-      },
-      relaySuspensionConfig: {
-        relaySuspensionInterval: 750,
-        relaySuspensionDuration: 5000,
-      },
-      islandId,
-      // TODO: is this peerId correct?
-      peerId: identity.authChain[0].payload,
-    },
-    peers
-  )
-}
-
-function* createLighthouseConnection(url: string) {
-  const identity: CommsIdentity = yield select(getCommsIdentity)
-  const positionReader: PositionReader | undefined = yield select(getCurrentPositionReader)
-  if (!positionReader) throw new Error("Missing positionReader")
-  const peerConfig: LighthouseConnectionConfig = {
-    connectionConfig: {
-      // MIGRATE: iceServers: [],
-    },
-    authHandler: async (msg: string) => {
-      try {
-        return Authenticator.signPayload(identity, msg)
-      } catch (e) {
-        commsLogger.info(`error while trying to sign message from lighthouse '${msg}'`)
-      }
-      // if any error occurs
-      return identity
-    },
-    logLevel: "TRACE",
-    targetConnections: 4,
-    maxConnections: 6,
-    positionConfig: {
-      selfPosition: () => {
-        const position = positionReader()
-        return [position.positionX, position.positionY, position.positionZ]
-      },
-      maxConnectionDistance: 4,
-      nearbyPeersDistance: 5,
-      disconnectDistance: 6,
-    },
-    // MIGRATE: add PREFERRED_ISLAND to action
-    preferedIslandId: "",
-  }
-
-  peerConfig.relaySuspensionConfig = {
-    relaySuspensionInterval: 750,
-    relaySuspensionDuration: 5000,
-  }
-
-  const lighthouse = new LighthouseWorldInstanceConnection(
-    url,
-    peerConfig,
-    (status) => {
-      commsLogger.log("Lighthouse status: ", status)
-      switch (status.status) {
-        case "realm-full":
-          disconnect(status.status, "The realm is full, reconnecting")
-          break
-        case "reconnection-error":
-          disconnect(status.status, "Reconnection comms error")
-          break
-        case "id-taken":
-          disconnect(status.status, "A previous connection to the connection server is still active")
-          break
-        case "error":
-          disconnect(status.status, "An error has ocurred in the communications server, reconnecting.")
-          break
-      }
-    },
-    identity,
-    console
-  )
-
-  function disconnect(reason: string, message: string) {
-    // TODO: trackEvent('disconnect_lighthouse', { message, reason, url })
-
-    /* TODO: getUnityInstance().ShowNotification({
-      type: NotificationType.GENERIC,
-      message: message,
-      buttonMessage: 'OK',
-      timer: 10
-    })*/
-
-    lighthouse
-      .disconnect({ kicked: reason === "id-taken", error: new Error(message) })
-      .catch(commsLogger.error)
-      .finally(() => {
-        setTimeout(
-          () => {
-            // MIGRATE: store.dispatch(setRealmAdapter(undefined))
-            // MIGRATE: store.dispatch(setRoomConnection(undefined))
-          },
-          reason === "id-taken" ? 10000 : 300
-        )
-      })
-  }
-
-  lighthouse.onIslandChangedObservable.add(({ island }) => {
-    // MIGRATE: store.dispatch(setCommsIsland(island))
-  })
-
-  return lighthouse
+function handleCommsMetrics<T extends keyof CommsEvents>(event: T, data: CommsEvents[T]) {
+  incrementCommsMessageReceivedByName(event)
 }
 
 // MIGRATE: function* initAvatarVisibilityProcess()
